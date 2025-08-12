@@ -24,8 +24,9 @@ RUN uv python install 3.12 && \
 ENV PATH="/opt/az-venv/bin:${PATH}"
 
 # (Playwright + browsers, your startup script, ports, etc., as before)
-RUN pip install --no-cache-dir playwright && \
-    python -m playwright install chromium
+RUN /opt/az-venv/bin/pip install --no-cache-dir playwright && \
+    # Install Chromium + its OS dependencies in one go
+    /opt/az-venv/bin/playwright install --with-deps chromium
 
 # Add a startup script that waits for the desktop then launches AgentZero UI
 # Kasm images auto-execute /dockerstartup/custom_startup.sh when a session spawns.
