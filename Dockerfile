@@ -4,31 +4,26 @@
 # e.g., 1.17.0-rolling-daily
 FROM kasmweb/kali-rolling-desktop:1.17.0-rolling-daily
 
-
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates git && rm -rf /var/lib/apt/lists/*
+    curl ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
 
-# 1) Install uv (fast Python & package manager)
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:${PATH}"
+# Install uv and put the binary in /usr/local/bin so PATH is not an issue
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
 
-# 2) Get AgentZero
+# Grab AgentZero source
 RUN git clone https://github.com/agent0ai/agent-zero /opt/agent-zero
 
-# 3) Create a venv with *Python 3.12* and install deps there
+# Create a Python 3.12 venv for AgentZero deps (avoids the kokoro<3.13 issue)
 RUN uv python install 3.12 && \
     uv venv /opt/az-venv --python 3.12 && \
     uv pip install --python /opt/az-venv/bin/python -r /opt/agent-zero/requirements.txt
 
+# Make the venv primary for subsequent RUN/CMD steps
 ENV PATH="/opt/az-venv/bin:${PATH}"
 
-# Pull AgentZero source & install
-# (You can pin a specific tag/commit if you prefer.)
-RUN git clone https://github.com/agent0ai/agent-zero /opt/agent-zero && \
-    pip install --no-cache-dir -r /opt/agent-zero/requirements.txt
-
-# Install Playwright browsers so the agent can drive a real browser on the desktop
+# (Playwright + browsers, your startup script, ports, etc., as before)
 RUN pip install --no-cache-dir playwright && \
     python -m playwright install chromium
 
