@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  az-kasm-kali:
+    build: .
+    container_name: az-kasm-kali
+    # Kasm desktop (VNC over WebSocket) is exposed on 6901 by default
+    # per Kasm image docs; AgentZero UI on 50001.
+    ports:
+      - "6901:6901"     # Kasm desktop (web)
+      - "50001:50001"   # AgentZero Web UI
+    environment:
+      # Set a password for the Kasm web/VNC session
+      - VNC_PW=${VNC_PW:-changeme}
+      # model provider secrets for AgentZero (pick what you use)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # ensure English locale if you need it
+      - LC_ALL=en_US.UTF-8
+    shm_size: "1g"      # improves Chromium stability
+    restart: unless-stopped
+    # Persist user home between rebuilds (optional but useful)
+    volumes:
+      - az_home:/home/kasm-user
+volumes:
+  az_home:
