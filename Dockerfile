@@ -4,15 +4,23 @@
 # e.g., 1.17.0-rolling-daily
 FROM kasmweb/kali-rolling-desktop:1.17.0-rolling-daily
 
+
 USER root
-
-# System deps for Python & Playwright
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-venv python3-pip git curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    curl ca-certificates git && rm -rf /var/lib/apt/lists/*
 
-# Create a venv for AgentZero
-RUN python3 -m venv /opt/az-venv
+# 1) Install uv (fast Python & package manager)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+# 2) Get AgentZero
+RUN git clone https://github.com/agent0ai/agent-zero /opt/agent-zero
+
+# 3) Create a venv with *Python 3.12* and install deps there
+RUN uv python install 3.12 && \
+    uv venv /opt/az-venv --python 3.12 && \
+    uv pip install --python /opt/az-venv/bin/python -r /opt/agent-zero/requirements.txt
+
 ENV PATH="/opt/az-venv/bin:${PATH}"
 
 # Pull AgentZero source & install
