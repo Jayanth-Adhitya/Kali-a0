@@ -1,41 +1,50 @@
-# Base: full Kali desktop that streams over the web via KasmVNC
-# Choose a tag that matches your Kasm version; rolling is kept fresh.
-# See "Default Docker Images" & "Building Custom Images" docs.
-# e.g., 1.17.0-rolling-daily
+# Full Kali desktop streamed via KasmVNC
 FROM kasmweb/kali-rolling-desktop:1.17.0-rolling-daily
 
 USER root
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Basics
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates git && \
-    rm -rf /var/lib/apt/lists/*
+    curl ca-certificates git bash \
+ && rm -rf /var/lib/apt/lists/*
 
-# Install uv and put the binary in /usr/local/bin so PATH is not an issue
-RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
+# --- Install micromamba (tiny conda) ---
+# Official one-liner from mamba docs
+# https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html
+RUN bash -lc "${SHELL:-bash} <(curl -L micro.mamba.pm/install.sh)"
+ENV MAMBA_ROOT_PREFIX="/root/.local/share/micromamba"
+ENV PATH="/root/.local/bin:${PATH}"
 
-# Grab AgentZero source
-RUN git clone https://github.com/agent0ai/agent-zero /opt/agent-zero
-
-# Create a Python 3.12 venv for AgentZero deps (avoids the kokoro<3.13 issue)
-RUN uv python install 3.12 && \
-    uv venv /opt/az-venv --python 3.12 && \
-    uv pip install --python /opt/az-venv/bin/python -r /opt/agent-zero/requirements.txt
-
-# Make the venv primary for subsequent RUN/CMD steps
+# --- Create a Python 3.12 env at /opt/az-venv and expose it on PATH ---
+RUN micromamba create -y -p /opt/az-venv python=3.12 pip \
+ && ln -s /opt/az-venv/bin/python /usr/local/bin/python \
+ && ln -s /opt/az-venv/bin/pip /usr/local/bin/pip
 ENV PATH="/opt/az-venv/bin:${PATH}"
 
-# (Playwright + browsers, your startup script, ports, etc., as before)
-RUN /opt/az-venv/bin/pip install --no-cache-dir playwright && \
-    # Install Chromium + its OS dependencies in one go
-    /opt/az-venv/bin/playwright install --with-deps chromium
+# --- Get AgentZero and install its deps into the Py3.12 env ---
+RUN git clone https://github.com/agent0ai/agent-zero /opt/agent-zero \
+ && pip install --no-cache-dir -r /opt/agent-zero/requirements.txt
 
-# Add a startup script that waits for the desktop then launches AgentZero UI
-# Kasm images auto-execute /dockerstartup/custom_startup.sh when a session spawns.
-# (Runs as the regular desktop user.)
+# --- Install Playwright + browsers + OS deps (Python CLI) ---
+# Docs: playwright Python + install-deps / --with-deps
+# https://playwright.dev/python/docs/browsers
+RUN pip install --no-cache-dir playwright \
+ && playwright install-deps chromium \
+ && playwright install chromium
+
+# Optional: more shared memory helps Chromium
+# (we also set shm_size in compose)
+# RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
+
+# --- Add a simple startup script for AgentZero UI ---
+# Kasm images call /dockerstartup/custom_startup.sh if present
+# (We guard in case desktop helper exists later.)
+RUN mkdir -p /dockerstartup
 COPY dockerstartup/custom_startup.sh /dockerstartup/custom_startup.sh
 RUN chmod +x /dockerstartup/custom_startup.sh
 
-# Optional: give Chromium more shared memory (helps avoid crashes)
-# Compose will set shm_size, but this is also OK:
-# RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
+# Permissions so the desktop user can read/execute the env & code
+RUN chown -R 1000:1000 /opt/agent-zero /opt/az-venv
 
 USER 1000
