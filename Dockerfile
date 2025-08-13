@@ -1,6 +1,10 @@
 FROM kasmweb/kali-rolling-desktop:1.17.0
 
 USER root
+
+# Preload the new Kali repository signing key (Apr 2025)
+RUN wget -q https://archive.kali.org/archive-keyring.gpg -O /usr/share/keyrings/kali-archive-keyring.gpg
+
 # Base tools for Agent Zero + Playwright
 RUN apt-get update && apt-get install -y \
     python3 python3-venv python3-pip git curl fonts-liberation \
