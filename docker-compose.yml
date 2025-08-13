@@ -1,17 +1,28 @@
 version: "3.9"
+
 services:
-  az-kasm-kali:
+  kali-az:
     build: .
-    container_name: az-kasm-kali
-    ports:
-      - "6901:6901"     # Kasm desktop (web VNC)
-      - "50001:50001"   # AgentZero UI
+    shm_size: "2gb"
     environment:
-      - VNC_PW=${VNC_PW:-changeme}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-    shm_size: "1g"      # Chromium stability
-    restart: unless-stopped
-    volumes:
-      - az_home:/home/kasm-user
-volumes:
+      # KasmVNC login (strong password!)
+      - VNC_PW=${KASM_VNC_PW}
+      # Agent Zero model keys (set in Coolify)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    labels:
+      - traefik.enable=true
+
+      # Route 1: streamed Kali desktop (KasmVNC on 6901)
+      - traefik.http.routers.kali.rule=Host(`kali.uptopoint.net`)
+      - traefik.http.routers.kali.entryPoints=websecure
+      - traefik.http.routers.kali.tls=true
+      - traefik.http.routers.kali.service=kali-svc
+      - traefik.http.services.kali-svc.loadbalancer.server.port=6901
+
+      # Route 2: Agent Zero UI (port 80 in same container)
+      - traefik.http.routers.az.rule=Host(`az-kali.uptopoint.net`)
+      - traefik.http.routers.az.entryPoints=websecure
+      - traefik.http.routers.az.tls=true
+      - traefik.http.routers.az.service=az-svc
+      - traefik.http.services.az-svc.loadbalancer.server.port=80
