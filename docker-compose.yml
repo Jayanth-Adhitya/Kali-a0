@@ -1,28 +1,21 @@
-version: "3.9"
-
 services:
-  kali-az:
+  a0:
     build: .
-    shm_size: "2gb"
+    shm_size: "2g"        # Playwright/Chromium stability
     environment:
-      # KasmVNC login (strong password!)
-      - VNC_PW=${KASM_VNC_PW}
-      # Agent Zero model keys (set in Coolify)
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-    labels:
-      - traefik.enable=true
+      # Change this in Coolify Secrets/Envs before deploying
+      - VNC_PW=${VNC_PW:-changeme}
 
-      # Route 1: streamed Kali desktop (KasmVNC on 6901)
-      - traefik.http.routers.kali.rule=Host(`kali.uptopoint.net`)
-      - traefik.http.routers.kali.entryPoints=websecure
-      - traefik.http.routers.kali.tls=true
-      - traefik.http.routers.kali.service=kali-svc
-      - traefik.http.services.kali-svc.loadbalancer.server.port=6901
+      # Add your LLM provider keys here or set them later in A0 UI:
+      # - OPENAI_API_KEY=...
+      # - ANTHROPIC_API_KEY=...
+      # - OPENROUTER_API_KEY=...
+    volumes:
+      # Persist A0 logs/memory and Kali user config if you like
+      - a0-logs:/opt/agent-zero/logs
+      - a0-home:/home/kasm-user
+    restart: unless-stopped
 
-      # Route 2: Agent Zero UI (port 80 in same container)
-      - traefik.http.routers.az.rule=Host(`az-kali.uptopoint.net`)
-      - traefik.http.routers.az.entryPoints=websecure
-      - traefik.http.routers.az.tls=true
-      - traefik.http.routers.az.service=az-svc
-      - traefik.http.services.az-svc.loadbalancer.server.port=80
+volumes:
+  a0-logs:
+  a0-home:

@@ -1,3 +1,0 @@
-network:
-  ssl:
-    require_ssl: false

@@ -1,33 +1,42 @@
+# Kali Linux desktop w/ KasmVNC (browser-streamed desktop)
 FROM kasmweb/kali-rolling-desktop:1.17.0
 
-# Base stays: FROM kasmweb/kali-rolling-desktop:1.17.0
 USER root
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
 
-# 1) Fix Kali apt key (Apr 2025 rotation)
-RUN wget -q https://archive.kali.org/archive-keyring.gpg -O /usr/share/keyrings/kali-archive-keyring.gpg
+# Essentials + Python
+RUN apt-get update && apt-get install -y \
+    git curl python3 python3-venv python3-pip \
+ && pip3 install --upgrade pip \
+ && rm -rf /var/lib/apt/lists/*
 
-# 2) Essentials + curl for uv
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl git ca-certificates fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
+# Pull AgentZero
+RUN git clone --depth=1 https://github.com/agent0ai/agent-zero /opt/agent-zero
+WORKDIR /opt/agent-zero
 
-# 3) Install uv and put it on PATH
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:${PATH}"
+# Python deps + Playwright (Chromium) + system deps
+RUN pip3 install -r requirements.txt \
+ && python3 -m playwright install --with-deps chromium
 
-# 4) Install CPython 3.12 and create a 3.12 venv for Agent Zero
-RUN uv python install 3.12 \
- && uv venv -p 3.12 /opt/az
+# Make a writable logs dir for kasm-user
+RUN mkdir -p /opt/agent-zero/logs && chown -R 1000:1000 /opt/agent-zero
 
-# 5) Get Agent Zero and install deps into that venv (incl. Playwright)
-RUN git clone https://github.com/agent0ai/agent-zero.git /opt/agent-zero
-RUN /opt/az/bin/uv pip install --upgrade pip setuptools wheel \
- && /opt/az/bin/uv pip install -r /opt/agent-zero/requirements.txt \
- && /opt/az/bin/uv pip install playwright \
- && /opt/az/bin/python -m playwright install --with-deps chromium
+# Supervisor program to run AgentZero alongside Kasm services
+RUN bash -lc 'cat >/etc/supervisor/conf.d/agentzero.conf <<EOF
+[program:agentzero]
+command=/usr/bin/python3 /opt/agent-zero/run_ui.py --host 0.0.0.0 --port 8080
+directory=/opt/agent-zero
+user=kasm-user
+autostart=true
+autorestart=true
+stdout_logfile=/var/log/supervisor/agentzero.log
+stderr_logfile=/var/log/supervisor/agentzero.err
+environment=HOME="/home/kasm-user",USER="kasm-user"
+EOF'
 
-# Start Agent Zero on session start (as kasm_user)
-COPY custom_startup.sh /dockerstartup/custom_startup.sh
-RUN chmod +x /dockerstartup/custom_startup.sh
+# Expose AgentZero UI and Kasm desktop ports
+EXPOSE 8080 6901
 
-EXPOSE 6901 80
+# Default VNC basic-auth password (override via env)
+ENV VNC_PW=changeme
