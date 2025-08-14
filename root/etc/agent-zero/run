@@ -1,0 +1,4 @@
+#!/usr/bin/with-contenv bash
+# Run Agent Zero's Web UI on port 8080 so Coolify can route to it
+cd /opt/agent-zero
+exec /opt/agentzero-venv/bin/python run_ui.py --host 0.0.0.0 --port 8080

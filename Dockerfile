@@ -1,43 +1,33 @@
-# syntax=docker/dockerfile:1
-FROM kasmweb/kali-rolling-desktop:1.17.0
+# Full desktop in browser (KasmVNC) + s6 supervisor
+FROM lscr.io/linuxserver/webtop:ubuntu-xfce
 
+# We need root to install packages; webtop will drop to user abc at runtime
 USER root
-ENV DEBIAN_FRONTEND=noninteractive \
-    HOME=/home/kasm-default-profile \
-    STARTUPDIR=/dockerstartup \
-    INST_SCRIPTS=$STARTUPDIR/install
-WORKDIR $HOME
 
-######### Customize container here #########
+# Python + build tools + git
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-venv python3-pip git curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-# Base tools + Python
-RUN apt-get update && apt-get install -y \
-      git curl python3 python3-venv python3-pip \
-  && rm -rf /var/lib/apt/lists/*
+# Create a venv for Agent Zero to keep it clean
+RUN python3 -m venv /opt/agentzero-venv
+ENV PATH="/opt/agentzero-venv/bin:${PATH}"
 
-# AgentZero
-RUN git clone --depth=1 https://github.com/agent0ai/agent-zero /opt/agent-zero \
- && pip3 install --upgrade pip \
- && pip3 install -r /opt/agent-zero/requirements.txt \
- && python3 -m playwright install --with-deps chromium
+# Pull Agent Zero and deps (browser-use + playwright)
+# Agent Zero repo: https://github.com/agent0ai/agent-zero
+RUN git clone --depth=1 https://github.com/agent0ai/agent-zero.git /opt/agent-zero \
+ && pip install --upgrade pip \
+ && pip install -r /opt/agent-zero/requirements.txt \
+ && pip install "browser-use==0.*" "playwright>=1.45" \
+ && playwright install chromium --with-deps --no-shell
 
-# Start AgentZero UI when the Kasm desktop is ready (runs as user 1000)
-RUN printf '%s\n' \
-  '/usr/bin/desktop_ready' \
-  'cd /opt/agent-zero' \
-  'exec /usr/bin/python3 /opt/agent-zero/run_ui.py --host 0.0.0.0 --port 8080 &' \
-  > $STARTUPDIR/custom_startup.sh \
-  && chmod +x $STARTUPDIR/custom_startup.sh
+# Add s6 services for Chromium (with remote debugging) and Agent Zero UI
+COPY root/ /
 
-######### End customizations #########
+# Expose internal ports used by s6 services
+# 3000 -> webtop HTTP (Coolify will terminate TLS for you)
+# 8080 -> Agent Zero UI
+# 9222 -> Chromium CDP (internal only; don't map a domain to this)
+EXPOSE 3000 8080 9222
 
-# Restore Kasm user context
-RUN chown 1000:0 $HOME && $STARTUPDIR/set_user_permission.sh $HOME \
- && mkdir -p /home/kasm-user && chown -R 1000:0 /home/kasm-user
-ENV HOME=/home/kasm-user
-WORKDIR $HOME
-USER 1000
-
-# AgentZero UI + KasmVNC desktop
-EXPOSE 8080 6901
-ENV VNC_PW=changeme
+# webtop uses s6-overlay; nothing else needed here

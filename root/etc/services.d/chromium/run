@@ -1,0 +1,7 @@
+#!/usr/bin/with-contenv bash
+# Start Chromium on the desktop with remote debugging so browser-use can attach
+# Profile persists in /config to keep logins & cookies
+exec chromium \
+  --user-data-dir=/config/chrome-profile \
+  --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 \
+  --no-sandbox --disable-dev-shm-usage --start-maximized about:blank
